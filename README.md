@@ -35,6 +35,7 @@ Open:
 
 - Health: `http://127.0.0.1:8000/health`
 - A2A metadata: `http://127.0.0.1:8000/agent-card`
+- MCP server: `http://127.0.0.1:8000/mcp`
 - Invoke: `POST http://127.0.0.1:8000/invoke`
 - Task alias: `POST http://127.0.0.1:8000/tasks`
 
@@ -111,6 +112,26 @@ The API returns:
 ## A2A Metadata
 
 `GET /agent-card` exposes a compact discovery document with service name, version, endpoints, safety constraints, input schema, output schema, LLM configuration, and agent roster. MedConsensus implements an A2A-style agent orchestration pattern with a discoverable agent-card endpoint compatible with Prompt Opinion integration requirements.
+
+## Prompt Opinion MCP Setup
+
+MedConsensus exposes a streamable HTTP MCP endpoint for Prompt Opinion and compatible MCP clients.
+
+- Endpoint: `https://medconsensus.onrender.com/mcp`
+- Transport: Streamable HTTP
+- Auth: None
+- Tool: `run_consensus`
+
+`run_consensus` accepts:
+
+```json
+{
+  "patient_case": "Synthetic/de-identified patient case text...",
+  "synthetic": true
+}
+```
+
+The tool calls the same MedConsensus orchestration logic used by `/invoke` and returns the same structured consensus output.
 
 ## Multi-Agent Reasoning Logic
 

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+import json
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from medconsensus import __version__
 from medconsensus.orchestrator import MedConsensusOrchestrator
@@ -14,6 +17,31 @@ app = FastAPI(
     description="A2A-enabled multi-agent clinical reasoning demo for synthetic/de-identified patient cases.",
 )
 orchestrator = MedConsensusOrchestrator()
+
+
+MCP_PROTOCOL_VERSION = "2024-11-05"
+RUN_CONSENSUS_TOOL = {
+    "name": "run_consensus",
+    "description": (
+        "Run the MedConsensus multi-agent clinical reasoning workflow on a synthetic/de-identified "
+        "patient case. Returns structured clinician decision-support recommendations, not a diagnosis."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "patient_case": {
+                "type": "string",
+                "description": "Synthetic/de-identified patient case text.",
+            },
+            "synthetic": {
+                "type": "boolean",
+                "default": True,
+                "description": "Must be true. Real patient cases are rejected.",
+            },
+        },
+        "required": ["patient_case"],
+    },
+}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -630,6 +658,111 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "medconsensus", "version": __version__}
 
 
+@app.get("/mcp")
+def mcp_get(request: Request):
+    accept = request.headers.get("accept", "")
+    if "text/event-stream" in accept:
+        async def event_stream():
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "notifications/message",
+                "params": {
+                    "level": "info",
+                    "logger": "medconsensus",
+                    "data": "MedConsensus MCP endpoint ready. Use POST /mcp for JSON-RPC messages.",
+                },
+            }
+            yield f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    return {
+        "name": "MedConsensus MCP Server",
+        "transport": "streamable_http",
+        "endpoint": "/mcp",
+        "auth": "none",
+        "tools": [RUN_CONSENSUS_TOOL["name"]],
+    }
+
+
+@app.post("/mcp")
+async def mcp_post(request: Request) -> JSONResponse:
+    payload = await request.json()
+    if isinstance(payload, list):
+        responses = [_handle_mcp_message(item) for item in payload]
+        return JSONResponse([item for item in responses if item is not None])
+
+    response = _handle_mcp_message(payload)
+    if response is None:
+        return JSONResponse(status_code=202, content={})
+    return JSONResponse(response)
+
+
+def _handle_mcp_message(message: dict[str, Any]) -> dict[str, Any] | None:
+    message_id = message.get("id")
+    method = message.get("method")
+    params = message.get("params") or {}
+
+    if method and method.startswith("notifications/"):
+        return None
+    if method == "initialize":
+        return _mcp_result(
+            message_id,
+            {
+                "protocolVersion": params.get("protocolVersion", MCP_PROTOCOL_VERSION),
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "medconsensus", "version": __version__},
+            },
+        )
+    if method == "ping":
+        return _mcp_result(message_id, {})
+    if method == "tools/list":
+        return _mcp_result(message_id, {"tools": [RUN_CONSENSUS_TOOL]})
+    if method == "tools/call":
+        return _mcp_tool_call(message_id, params)
+
+    return _mcp_error(message_id, -32601, f"Unsupported MCP method: {method}")
+
+
+def _mcp_tool_call(message_id: Any, params: dict[str, Any]) -> dict[str, Any]:
+    if params.get("name") != "run_consensus":
+        return _mcp_error(message_id, -32602, "Unknown tool. Available tool: run_consensus")
+
+    arguments = params.get("arguments") or {}
+    patient_case = arguments.get("patient_case")
+    synthetic = arguments.get("synthetic", True)
+    if not isinstance(patient_case, str) or not patient_case.strip():
+        return _mcp_error(message_id, -32602, "run_consensus requires a non-empty patient_case string")
+
+    try:
+        report = orchestrator.invoke(SyntheticCaseRequest(patient_case=patient_case, synthetic=synthetic))
+    except Exception as exc:
+        return _mcp_error(message_id, -32000, str(exc))
+
+    structured = report.model_dump(mode="json")
+    return _mcp_result(
+        message_id,
+        {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(structured, indent=2),
+                }
+            ],
+            "structuredContent": structured,
+            "isError": False,
+        },
+    )
+
+
+def _mcp_result(message_id: Any, result: dict[str, Any]) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": message_id, "result": result}
+
+
+def _mcp_error(message_id: Any, code: int, message: str) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": message_id, "error": {"code": code, "message": message}}
+
+
 @app.get("/agent-card")
 def agent_card() -> dict[str, object]:
     return {
@@ -649,7 +782,7 @@ def agent_card() -> dict[str, object]:
         ],
         "input_schema": SyntheticCaseRequest.model_json_schema(),
         "output_schema": ConsensusReport.model_json_schema(),
-        "endpoints": {"health": "/health", "invoke": "/invoke", "tasks": "/tasks"},
+        "endpoints": {"health": "/health", "agent_card": "/agent-card", "invoke": "/invoke", "tasks": "/tasks", "mcp": "/mcp"},
         "safety": {
             "synthetic_only": True,
             "stores_phi": False,

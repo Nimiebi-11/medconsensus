@@ -75,6 +75,38 @@ def test_json_output_schema() -> None:
     assert payload["consensus"]["recommended_next_tests"]
 
 
+def test_mcp_discovery_and_tool_invocation() -> None:
+    discovery = client.get("/mcp")
+    assert discovery.status_code == 200
+    assert discovery.json()["transport"] == "streamable_http"
+    assert "run_consensus" in discovery.json()["tools"]
+
+    tools = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert tools.status_code == 200
+    assert tools.json()["result"]["tools"][0]["name"] == "run_consensus"
+
+    call = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "run_consensus",
+                "arguments": {
+                    "synthetic": True,
+                    "patient_case": DEMO_CASE["patient_case"],
+                },
+            },
+        },
+    )
+    assert call.status_code == 200
+    result = call.json()["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"]["consensus"]["disclaimer"] == DISCLAIMER
+    assert result["structuredContent"]["metadata"]["mode"] in {"deterministic_fallback", "llm_multi_agent"}
+
+
 def test_no_phi_storage_behavior() -> None:
     storage_dir = Path("storage")
     before = set(storage_dir.rglob("*")) if storage_dir.exists() else set()
