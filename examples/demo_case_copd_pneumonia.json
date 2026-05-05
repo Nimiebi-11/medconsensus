@@ -1,0 +1,5 @@
+{
+  "case_id": "demo-copd-pneumonia",
+  "synthetic": true,
+  "patient_case": "Patient: 67M synthetic case. Chief complaint: Fever, productive cough, and worsening shortness of breath for 4 days. Vitals: HR 108, BP 132/78, RR 24, SpO2 90% on room air, temperature 38.4 C. Exam: Diffuse wheezes with focal right lower lobe crackles, no JVD, no pitting edema. Labs: WBC 15.8, BNP 90, troponin negative. CXR: Right lower lobe infiltrate with hyperinflation. History: COPD and former smoking."
+}

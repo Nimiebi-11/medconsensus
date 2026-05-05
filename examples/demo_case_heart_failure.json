@@ -1,0 +1,5 @@
+{
+  "case_id": "demo-heart-failure-overlap",
+  "synthetic": true,
+  "patient_case": "Patient: 58F. Chief complaint: Progressively worsening dyspnea x 3 weeks, orthopnea, 2-pillow sleep. Vitals: HR 102, BP 148/92, RR 20, SpO2 94% on room air. Exam: Bilateral crackles at lung bases, JVD, 2+ pitting edema bilateral ankles, S3 gallop on auscultation. Labs: BNP 890 pg/mL, troponin I 0.04 ng/mL borderline, Cr 1.4 baseline 1.0, Na 133. CXR: Cardiomegaly, bilateral pleural effusions, Kerley B lines. History: HTN x 15y, T2DM, prior smoking 20 pack-years, no prior cardiac history documented."
+}

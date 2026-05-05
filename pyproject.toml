@@ -1,0 +1,21 @@
+[project]
+name = "medconsensus"
+version = "0.1.0"
+description = "A2A-enabled multi-agent clinical reasoning demo for synthetic patient cases."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.26",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

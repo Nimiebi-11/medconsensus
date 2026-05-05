@@ -1,0 +1,5 @@
+{
+  "case_id": "demo-pulmonary-embolism-mimic",
+  "synthetic": true,
+  "patient_case": "Patient: 45F synthetic case. Chief complaint: Sudden dyspnea and pleuritic chest discomfort after a long flight. Vitals: HR 118, BP 124/76, RR 26, SpO2 91% on room air. Exam: Clear lungs, no S3, no JVD, mild unilateral calf tenderness. Labs: BNP 60, troponin 0.02, D-dimer elevated. CXR: No focal infiltrate, normal cardiac silhouette. History: Estrogen therapy, no known cardiac disease."
+}
