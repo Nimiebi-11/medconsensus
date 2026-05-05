@@ -171,6 +171,10 @@ def root() -> str:
       color: var(--muted);
       font-size: 13px;
     }}
+    button:disabled {{
+      cursor: wait;
+      opacity: 0.68;
+    }}
     .agents {{
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -255,9 +259,9 @@ def root() -> str:
         <p class="tagline">Multi-agent clinical reasoning that challenges diagnostic tunnel vision</p>
       </div>
       <nav class="links" aria-label="API links">
-        <a href="/docs">Docs</a>
-        <a href="/health">Health</a>
-        <a href="/agent-card">Agent Card</a>
+        <a href="/docs" target="_blank" rel="noopener">API Docs</a>
+        <a id="healthLink" href="/health" target="_blank" rel="noopener">Health</a>
+        <a id="agentCardLink" href="/agent-card" target="_blank" rel="noopener">Agent Card</a>
       </nav>
     </div>
   </header>
@@ -316,6 +320,9 @@ def root() -> str:
     const output = document.querySelector("#output");
     const statusEl = document.querySelector("#status");
     const confidencePill = document.querySelector("#confidencePill");
+    const runButton = document.querySelector("#runButton");
+    const resetButton = document.querySelector("#resetButton");
+    const emptyOutputHtml = '<div class="empty">Run a synthetic case to see specialist assessments, debate, and consensus recommendations.</div>';
 
     function escapeHtml(value) {{
       return String(value).replace(/[&<>"']/g, (char) => ({{
@@ -341,6 +348,18 @@ def root() -> str:
       caseText.value = demoCases[caseSelect.value];
     }}
 
+    function clearResults() {{
+      output.innerHTML = emptyOutputHtml;
+      statusEl.textContent = "Ready";
+      confidencePill.textContent = "waiting";
+      confidencePill.className = "pill";
+    }}
+
+    function resetCase() {{
+      loadCase();
+      clearResults();
+    }}
+
     function renderReport(report) {{
       const confidence = Number(report.consensus.confidence);
       const confidenceBand = confidenceClass(confidence);
@@ -348,7 +367,22 @@ def root() -> str:
       confidencePill.className = `pill ${{confidenceBand}}`;
       output.innerHTML = `
         <div class="result-block">
-          <h3>Consensus</h3>
+          <h3>1. Specialist Assessments</h3>
+          ${{report.specialist_assessments.map((item) => `
+            <p><strong>${{escapeHtml(item.agent)}}:</strong> ${{escapeHtml(item.top_diagnosis)}}</p>
+            <p><strong>Differential:</strong> ${{escapeHtml(item.differential_diagnoses.join(", "))}}</p>
+            ${{list(item.supporting_evidence)}}
+          `).join("")}}
+        </div>
+        <div class="result-block">
+          <h3>2. Debate Summary</h3>
+          ${{report.debate_summary.map((item) => `
+            <p><strong>${{escapeHtml(item.from_agent)}} challenge:</strong> ${{escapeHtml(item.challenge)}}</p>
+            <p><strong>Revision:</strong> ${{escapeHtml(item.response_or_revision)}}</p>
+          `).join("")}}
+        </div>
+        <div class="result-block">
+          <h3>3. Final Consensus</h3>
           <p><strong>Most likely:</strong> ${{escapeHtml(report.consensus.most_likely_diagnosis)}} <span class="pill ${{confidenceBand}}">${{confidence}}/100</span></p>
           <p><strong>Mode:</strong> ${{escapeHtml(report.metadata.mode)}}</p>
           <p><strong>Must-not-miss diagnoses:</strong> ${{escapeHtml(report.consensus.must_not_miss_diagnoses.join(", "))}}</p>
@@ -359,24 +393,6 @@ def root() -> str:
           <p><strong>Recommended tests</strong></p>
           ${{list(report.consensus.recommended_next_tests)}}
         </div>
-        <div class="result-block">
-          <h3>1. Three Specialist Opinions</h3>
-          ${{report.specialist_assessments.map((item) => `
-            <p><strong>${{escapeHtml(item.agent)}}:</strong> ${{escapeHtml(item.top_diagnosis)}}</p>
-            ${{list(item.supporting_evidence)}}
-          `).join("")}}
-        </div>
-        <div class="result-block">
-          <h3>2. Critique Step</h3>
-          ${{report.debate_summary.map((item) => `
-            <p><strong>${{escapeHtml(item.from_agent)}}:</strong> ${{escapeHtml(item.challenge)}}</p>
-            <p>${{escapeHtml(item.response_or_revision)}}</p>
-          `).join("")}}
-        </div>
-        <div class="result-block">
-          <h3>Raw JSON</h3>
-          <pre>${{escapeHtml(JSON.stringify(report, null, 2))}}</pre>
-        </div>
       `;
     }}
 
@@ -384,7 +400,9 @@ def root() -> str:
       statusEl.textContent = "Running debate...";
       confidencePill.textContent = "running";
       confidencePill.className = "pill";
-      output.innerHTML = '<div class="empty">Specialists are assessing and debating the synthetic case.</div>';
+      runButton.disabled = true;
+      resetButton.disabled = true;
+      output.innerHTML = '<div class="empty">Loading: specialists are assessing the synthetic case, critiquing each other, and building consensus.</div>';
       try {{
         const response = await fetch("/invoke", {{
           method: "POST",
@@ -404,15 +422,18 @@ def root() -> str:
       }} catch (error) {{
         confidencePill.textContent = "error";
         confidencePill.className = "pill low";
-        output.innerHTML = `<div class="result-block"><h3>Unable to run</h3><p>${{escapeHtml(error.message)}}</p></div>`;
+        output.innerHTML = `<div class="result-block"><h3>Unable to run consensus</h3><p>${{escapeHtml(error.message)}}</p></div>`;
         statusEl.textContent = "Error";
+      }} finally {{
+        runButton.disabled = false;
+        resetButton.disabled = false;
       }}
     }}
 
-    caseSelect.addEventListener("change", loadCase);
-    document.querySelector("#resetButton").addEventListener("click", loadCase);
-    document.querySelector("#runButton").addEventListener("click", runConsensus);
-    loadCase();
+    caseSelect.addEventListener("change", resetCase);
+    resetButton.addEventListener("click", resetCase);
+    runButton.addEventListener("click", runConsensus);
+    resetCase();
   </script>
 </body>
 </html>"""

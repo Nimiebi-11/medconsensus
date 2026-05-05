@@ -27,6 +27,22 @@ def test_health_check() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_homepage_demo_controls() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    html = response.text
+    assert "API Docs" in html
+    assert "id=\"healthLink\"" in html
+    assert "id=\"agentCardLink\"" in html
+    assert "function resetCase()" in html
+    assert "Raw JSON" not in html
+    assert "showEndpoint" not in html
+    assert "apiPanel" not in html
+    assert "1. Specialist Assessments" in html
+    assert "2. Debate Summary" in html
+    assert "3. Final Consensus" in html
+
+
 def test_synthetic_case_invocation() -> None:
     response = client.post("/invoke", json=DEMO_CASE)
     assert response.status_code == 200
