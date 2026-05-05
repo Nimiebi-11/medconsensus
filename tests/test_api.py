@@ -32,12 +32,17 @@ def test_homepage_demo_controls() -> None:
     assert response.status_code == 200
     html = response.text
     assert "API Docs" in html
-    assert "id=\"healthLink\"" in html
-    assert "id=\"agentCardLink\"" in html
+    assert "id=\"healthButton\"" in html
+    assert "id=\"agentCardButton\"" in html
     assert "function resetCase()" in html
-    assert "Raw JSON" not in html
-    assert "showEndpoint" not in html
-    assert "apiPanel" not in html
+    assert "function showEndpoint(kind, path)" in html
+    assert "Show raw JSON" in html
+    assert "apiPanel" in html
+    assert "Health Check" in html
+    assert "Agent Card Summary" in html
+    assert "Fallback mode is active because no paid LLM credits are available" in html
+    assert "LLM Multi-Agent Mode" in html
+    assert "Deterministic Fallback Mode" in html
     assert "1. Specialist Assessments" in html
     assert "2. Debate Summary" in html
     assert "3. Final Consensus" in html
@@ -70,7 +75,7 @@ def test_json_output_schema() -> None:
     assert payload["consensus"]["recommended_next_tests"]
 
 
-def test_no_phi_storage_behavior(tmp_path) -> None:
+def test_no_phi_storage_behavior() -> None:
     storage_dir = Path("storage")
     before = set(storage_dir.rglob("*")) if storage_dir.exists() else set()
     response = client.post("/invoke", json=DEMO_CASE)

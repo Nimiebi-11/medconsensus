@@ -106,6 +106,16 @@ def root() -> str:
       color: #4c3a18;
       font-size: 14px;
     }}
+    .demo-step {{
+      margin-bottom: 16px;
+      border: 1px solid #b9d6d1;
+      border-left: 5px solid var(--teal);
+      border-radius: 7px;
+      padding: 12px 14px;
+      background: #effaf8;
+      color: #163f3b;
+      font-size: 14px;
+    }}
     .grid {{
       display: grid;
       grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.25fr);
@@ -208,9 +218,37 @@ def root() -> str:
       padding: 12px;
       background: #ffffff;
     }}
+    .result-block.featured {{
+      border-color: #b9d6d1;
+      background: #fbfffe;
+    }}
     .result-block h3 {{
       margin: 0 0 8px;
       font-size: 14px;
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }}
+    .summary-item {{
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 10px;
+      background: #fbfcfd;
+    }}
+    .summary-item span {{
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      margin-bottom: 4px;
+    }}
+    .summary-item strong {{
+      display: block;
+      font-size: 15px;
+      overflow-wrap: anywhere;
     }}
     .pill {{
       display: inline-flex;
@@ -226,6 +264,22 @@ def root() -> str:
     .pill.high {{ background: var(--teal); }}
     .pill.moderate {{ background: var(--amber); }}
     .pill.low {{ background: var(--rose); }}
+    .pill.mode {{
+      margin-left: 6px;
+      background: var(--blue);
+    }}
+    .pill.fallback {{
+      background: var(--amber);
+    }}
+    .fallback-note {{
+      margin: 10px 0 0;
+      border-left: 4px solid var(--amber);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fff8e6;
+      color: #4c3a18;
+      font-size: 13px;
+    }}
     ul {{
       margin: 8px 0 0;
       padding-left: 20px;
@@ -243,11 +297,41 @@ def root() -> str:
       padding: 28px 16px;
       text-align: center;
     }}
+    .api-panel {{
+      margin: 16px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }}
+    .api-panel[hidden] {{
+      display: none;
+    }}
+    .api-panel .section-head {{
+      background: #fbfcfd;
+    }}
+    .raw-toggle {{
+      margin-top: 6px;
+    }}
+    details.raw-json summary {{
+      cursor: pointer;
+      font-weight: 700;
+    }}
+    details.raw-json pre {{
+      margin-top: 10px;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 10px;
+      background: #fbfcfd;
+    }}
     @media (max-width: 860px) {{
       .topbar {{ align-items: flex-start; flex-direction: column; }}
       .links {{ justify-content: flex-start; }}
       .grid {{ grid-template-columns: 1fr; }}
       .agents {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .summary-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -260,14 +344,22 @@ def root() -> str:
       </div>
       <nav class="links" aria-label="API links">
         <a href="/docs" target="_blank" rel="noopener">API Docs</a>
-        <a id="healthLink" href="/health" target="_blank" rel="noopener">Health</a>
-        <a id="agentCardLink" href="/agent-card" target="_blank" rel="noopener">Agent Card</a>
+        <button id="healthButton" type="button">Health</button>
+        <button id="agentCardButton" type="button">Agent Card</button>
       </nav>
     </div>
   </header>
   <main class="wrap">
     <div class="notice">{DISCLAIMER} MedConsensus does not diagnose patients, recommend treatment, or replace clinician judgment.</div>
     <div class="notice">Instead of relying on a single AI response, MedConsensus makes specialist agents disagree, critique, and justify their reasoning before producing a final answer.</div>
+    <div class="demo-step">Demo flow: synthetic case input -> Run Consensus -> specialist assessments -> debate summary -> final consensus with ICD-10 codes, questions, tests, and safety notes.</div>
+    <section id="apiPanel" class="api-panel" hidden>
+      <div class="section-head">
+        <h2 id="apiPanelTitle">Endpoint Summary</h2>
+        <span class="status" id="apiStatus">Ready</span>
+      </div>
+      <div class="body" id="apiOutput"></div>
+    </section>
     <div class="grid">
       <section>
         <div class="section-head">
@@ -322,6 +414,10 @@ def root() -> str:
     const confidencePill = document.querySelector("#confidencePill");
     const runButton = document.querySelector("#runButton");
     const resetButton = document.querySelector("#resetButton");
+    const apiPanel = document.querySelector("#apiPanel");
+    const apiPanelTitle = document.querySelector("#apiPanelTitle");
+    const apiStatus = document.querySelector("#apiStatus");
+    const apiOutput = document.querySelector("#apiOutput");
     const emptyOutputHtml = '<div class="empty">Run a synthetic case to see specialist assessments, debate, and consensus recommendations.</div>';
 
     function escapeHtml(value) {{
@@ -336,6 +432,12 @@ def root() -> str:
 
     function list(items) {{
       return `<ul>${{items.map((item) => `<li>${{escapeHtml(item)}}</li>`).join("")}}</ul>`;
+    }}
+
+    function summaryGrid(items) {{
+      return `<div class="summary-grid">${{items.map((item) => `
+        <div class="summary-item"><span>${{escapeHtml(item.label)}}</span><strong>${{escapeHtml(item.value)}}</strong></div>
+      `).join("")}}</div>`;
     }}
 
     function confidenceClass(score) {{
@@ -358,11 +460,26 @@ def root() -> str:
     function resetCase() {{
       loadCase();
       clearResults();
+      apiPanel.hidden = true;
+      apiOutput.innerHTML = "";
+      apiStatus.textContent = "Ready";
+    }}
+
+    function modeLabel(mode) {{
+      return mode === "llm_multi_agent" ? "LLM Multi-Agent Mode" : "Deterministic Fallback Mode";
+    }}
+
+    function modeClass(mode) {{
+      return mode === "llm_multi_agent" ? "mode" : "mode fallback";
     }}
 
     function renderReport(report) {{
       const confidence = Number(report.consensus.confidence);
       const confidenceBand = confidenceClass(confidence);
+      const mode = report.metadata.mode;
+      const fallbackNote = mode === "deterministic_fallback"
+        ? '<div class="fallback-note">Fallback mode is active because no paid LLM credits are available. The service preserves the same multi-agent orchestration and schemas used for LLM mode.</div>'
+        : '';
       confidencePill.textContent = `${{confidence}}/100`;
       confidencePill.className = `pill ${{confidenceBand}}`;
       output.innerHTML = `
@@ -381,19 +498,86 @@ def root() -> str:
             <p><strong>Revision:</strong> ${{escapeHtml(item.response_or_revision)}}</p>
           `).join("")}}
         </div>
-        <div class="result-block">
+        <div class="result-block featured">
           <h3>3. Final Consensus</h3>
-          <p><strong>Most likely:</strong> ${{escapeHtml(report.consensus.most_likely_diagnosis)}} <span class="pill ${{confidenceBand}}">${{confidence}}/100</span></p>
-          <p><strong>Mode:</strong> ${{escapeHtml(report.metadata.mode)}}</p>
+          <p><strong>Most likely:</strong> ${{escapeHtml(report.consensus.most_likely_diagnosis)}} <span class="pill ${{confidenceBand}}">${{confidence}}/100</span> <span class="pill ${{modeClass(mode)}}">${{escapeHtml(modeLabel(mode))}}</span></p>
+          ${{fallbackNote}}
           <p><strong>Must-not-miss diagnoses:</strong> ${{escapeHtml(report.consensus.must_not_miss_diagnoses.join(", "))}}</p>
-          <p><strong>ICD-10 codes</strong></p>
+          <p><strong>ICD-10 Codes</strong></p>
           ${{list(report.consensus.icd10_codes.map((item) => `${{item.code}} - ${{item.label}}`))}}
-          <p><strong>Next questions</strong></p>
+          <p><strong>Recommended Questions</strong></p>
           ${{list(report.consensus.recommended_next_questions)}}
-          <p><strong>Recommended tests</strong></p>
+          <p><strong>Recommended Tests</strong></p>
           ${{list(report.consensus.recommended_next_tests)}}
+          <p><strong>Safety Notes</strong></p>
+          ${{list(report.consensus.safety_notes)}}
+        </div>
+        <div class="result-block">
+          <details class="raw-json">
+            <summary>Show raw JSON</summary>
+            <pre>${{escapeHtml(JSON.stringify(report, null, 2))}}</pre>
+          </details>
         </div>
       `;
+    }}
+
+    function renderHealth(payload) {{
+      apiPanelTitle.textContent = "Health Check";
+      apiOutput.innerHTML = `
+        ${{summaryGrid([
+          {{ label: "Status", value: payload.status }},
+          {{ label: "Service", value: payload.service }},
+          {{ label: "Version", value: payload.version }}
+        ])}}
+      `;
+    }}
+
+    function renderAgentCard(payload) {{
+      apiPanelTitle.textContent = "Agent Card Summary";
+      apiOutput.innerHTML = `
+        <div class="result-block">
+          <h3>${{escapeHtml(payload.name)}}</h3>
+          <p>${{escapeHtml(payload.description)}}</p>
+          ${{summaryGrid([
+            {{ label: "Version", value: payload.version }},
+            {{ label: "Protocol", value: payload.protocol }},
+            {{ label: "Invoke Endpoint", value: payload.endpoints.invoke }}
+          ])}}
+          <p><strong>Agents</strong></p>
+          ${{list(payload.agents || [])}}
+          <p><strong>Capabilities</strong></p>
+          ${{list(payload.capabilities || [])}}
+          <p><strong>Safety</strong></p>
+          ${{list([
+            payload.safety.synthetic_only ? "Synthetic/de-identified cases only" : "Synthetic-only flag unavailable",
+            payload.safety.stores_phi ? "Stores PHI" : "No PHI stored",
+            payload.safety.recommendation_scope
+          ])}}
+        </div>
+      `;
+    }}
+
+    async function showEndpoint(kind, path) {{
+      apiPanel.hidden = false;
+      apiPanelTitle.textContent = kind === "health" ? "Health Check" : "Agent Card Summary";
+      apiStatus.textContent = "Loading...";
+      apiOutput.innerHTML = '<div class="empty">Loading endpoint summary...</div>';
+      try {{
+        const response = await fetch(path);
+        const payload = await response.json();
+        if (!response.ok) {{
+          throw new Error(payload.detail || `Endpoint returned ${{response.status}}`);
+        }}
+        if (kind === "health") {{
+          renderHealth(payload);
+        }} else {{
+          renderAgentCard(payload);
+        }}
+        apiStatus.textContent = "Loaded";
+      }} catch (error) {{
+        apiOutput.innerHTML = `<div class="result-block"><h3>Unable to load endpoint</h3><p>${{escapeHtml(error.message)}}</p></div>`;
+        apiStatus.textContent = "Error";
+      }}
     }}
 
     async function runConsensus() {{
@@ -433,6 +617,8 @@ def root() -> str:
     caseSelect.addEventListener("change", resetCase);
     resetButton.addEventListener("click", resetCase);
     runButton.addEventListener("click", runConsensus);
+    document.querySelector("#healthButton").addEventListener("click", () => showEndpoint("health", "/health"));
+    document.querySelector("#agentCardButton").addEventListener("click", () => showEndpoint("agent-card", "/agent-card"));
     resetCase();
   </script>
 </body>
